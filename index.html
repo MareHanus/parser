@@ -317,6 +317,59 @@
       color: #4ecdc4;
       font-weight: 600;
     }
+
+    .village-name-clickable {
+      cursor: pointer;
+      transition: all 0.2s;
+      border-radius: 4px;
+      padding: 2px 4px;
+      margin: -2px -4px;
+    }
+
+    .village-name-clickable:hover {
+      background: rgba(78, 205, 196, 0.2);
+      color: #4ecdc4;
+    }
+
+    .filter-indicator {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      background: rgba(78, 205, 196, 0.15);
+      border: 1px solid rgba(78, 205, 196, 0.3);
+      padding: 10px 16px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+
+    .filter-indicator.active {
+      display: flex;
+    }
+
+    .filter-indicator-text {
+      color: #4ecdc4;
+      font-size: 14px;
+    }
+
+    .filter-indicator-text strong {
+      color: #fff;
+    }
+
+    .filter-clear-btn {
+      background: rgba(255, 107, 107, 0.2);
+      color: #ff6b6b;
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      padding: 5px 12px;
+      border-radius: 15px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-clear-btn:hover {
+      background: rgba(255, 107, 107, 0.4);
+    }
   </style>
 </head>
 <body>
@@ -341,6 +394,13 @@
         </div>
       </div>
       
+      <div id="filterIndicator" class="filter-indicator">
+        <span class="filter-indicator-text">
+          Filtering by <span id="filterType"></span>: <strong id="filterValue"></strong>
+        </span>
+        <button class="filter-clear-btn" onclick="clearFilter()">Clear Filter</button>
+      </div>
+
       <div class="table-wrapper">
         <table id="resultsTable">
           <thead>
@@ -373,7 +433,46 @@
 
   <script>
     let parsedData = [];
-    
+    let currentFilter = null; // { type: 'origin'|'target', villageName: string }
+
+    function setFilter(type, villageName) {
+      currentFilter = { type, villageName };
+      updateFilterIndicator();
+      renderTable(parsedData);
+    }
+
+    function clearFilter() {
+      currentFilter = null;
+      updateFilterIndicator();
+      renderTable(parsedData);
+    }
+
+    function updateFilterIndicator() {
+      const indicator = document.getElementById('filterIndicator');
+      const filterType = document.getElementById('filterType');
+      const filterValue = document.getElementById('filterValue');
+
+      if (currentFilter) {
+        indicator.classList.add('active');
+        filterType.textContent = currentFilter.type === 'origin' ? 'Origin Village' : 'Target Village';
+        filterValue.textContent = currentFilter.villageName;
+      } else {
+        indicator.classList.remove('active');
+      }
+    }
+
+    function getFilteredData(data) {
+      if (!currentFilter) return data;
+
+      return data.filter(attack => {
+        if (currentFilter.type === 'origin') {
+          return attack.origin.name === currentFilter.villageName;
+        } else {
+          return attack.target.name === currentFilter.villageName;
+        }
+      });
+    }
+
     // Unit speeds in minutes per 1 distance
     const UNIT_SPEEDS = [
       { name: 'LC', speed: 8, color: '#00cec9' },
@@ -559,7 +658,10 @@
     function renderTable(data) {
       const tbody = document.getElementById('resultsBody');
       const countEl = document.getElementById('attackCount');
-      
+
+      // Apply filter
+      const filteredData = getFilteredData(data);
+
       if (data.length === 0) {
         tbody.innerHTML = `
           <tr>
@@ -572,18 +674,38 @@
         countEl.textContent = '0 attacks';
         return;
       }
-      
-      countEl.textContent = `${data.length} attack${data.length !== 1 ? 's' : ''}`;
-      
-      tbody.innerHTML = data.map((attack, idx) => `
+
+      if (filteredData.length === 0 && currentFilter) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="11" class="no-results">
+              <div class="no-results-icon">🔍</div>
+              <div>No attacks match the current filter</div>
+            </td>
+          </tr>
+        `;
+        countEl.textContent = `0 of ${data.length} attacks`;
+        return;
+      }
+
+      // Update count to show filtered vs total
+      if (currentFilter) {
+        countEl.textContent = `${filteredData.length} of ${data.length} attack${data.length !== 1 ? 's' : ''}`;
+      } else {
+        countEl.textContent = `${data.length} attack${data.length !== 1 ? 's' : ''}`;
+      }
+
+      tbody.innerHTML = filteredData.map((attack, idx) => `
         <tr>
           <td>${idx + 1}</td>
           <td>
-            <div class="village-name">${escapeHtml(attack.origin.name)}</div>
+            <div class="village-name village-name-clickable" title="Click to filter by this origin village" onclick="setFilter('origin', '${escapeHtml(attack.origin.name).replace(/'/g, "\\'")}')">${escapeHtml(attack.origin.name)}</div>
             <div class="player-name">${escapeHtml(attack.origin.player)}</div>
           </td>
           <td class="coords">(${attack.origin.x} | ${attack.origin.y})</td>
-          <td class="village-name">${escapeHtml(attack.target.name)}</td>
+          <td>
+            <div class="village-name village-name-clickable" title="Click to filter by this target village" onclick="setFilter('target', '${escapeHtml(attack.target.name).replace(/'/g, "\\'")}')">${escapeHtml(attack.target.name)}</div>
+          </td>
           <td class="coords">(${attack.target.x} | ${attack.target.y})</td>
           <td class="arrival-time">${escapeHtml(attack.arrivalTime)}</td>
           <td class="sent-time">${attack.sentTime ? escapeHtml(attack.sentTime) : '-'}</td>
@@ -641,6 +763,8 @@
     function clearAll() {
       document.getElementById('htmlInput').value = '';
       parsedData = [];
+      currentFilter = null;
+      updateFilterIndicator();
       renderTable([]);
     }
     
